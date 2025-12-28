@@ -1,5 +1,5 @@
 {
-  "name": "auto-short-video-api",
+  "name": "music-tags-api",
   "version": "1.0.0",
   "main": "server.js",
   "type": "commonjs",
