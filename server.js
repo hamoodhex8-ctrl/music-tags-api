@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
-// إعداد Gemini
+// إعداد Gemini باستخدام المتغير البيئي
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -17,29 +17,23 @@ const OUT_DIR = path.join(__dirname, "output");
 if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
 const JOBS = new Map();
 
-// دالة توليد المحتوى باستخدام Gemini (أصلي 100%)
+// دالة توليد السكربت - أصلية 100%
 async function generateGeminiStory(topic) {
-  const prompt = `Create a 100% original cinematic short video script about: ${topic}. 
-  Rules: No copyrighted characters, no celebrities, high engagement.
-  Return the response as a valid JSON object ONLY with this structure:
-  { "title": "string", "scenes": [{ "visual": "string", "audio": "string" }] }`;
-
+  const prompt = `Create a short video script about: ${topic}. 100% original, no copyright. Return ONLY JSON: {"title": "", "scenes": [{"text": ""}]}`;
   const result = await model.generateContent(prompt);
   const response = await result.response;
-  let text = response.text();
-  
-  // تنظيف النص من أي علامات Markdown قد تضعها Gemini
-  text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+  let text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
   return JSON.parse(text);
 }
 
+// الرابط اللي بتطلبه من n8n
 app.post("/api/short-video", async (req, res) => {
   const id = uuidv4();
-  res.json({ id, status: "processing" }); // رد سريع لمنع الفصل
+  // بنرد فوراً عشان n8n ما يفكر إن السيرفر معلق
+  res.json({ id, status: "processing" }); 
 
-  JOBS.set(id, { status: "running" });
   try {
-    const script = await generateGeminiStory(req.body.topic || "Adventure");
+    const script = await generateGeminiStory(req.body.topic || "mystery");
     fs.writeFileSync(path.join(OUT_DIR, `${id}.json`), JSON.stringify(script));
     JOBS.set(id, { status: "done", result: script });
   } catch (e) {
@@ -47,8 +41,10 @@ app.post("/api/short-video", async (req, res) => {
   }
 });
 
+// رابط عشان n8n يشيك هل خلص السيرفر ولا لسه
 app.get("/api/status/:id", (req, res) => {
-  res.json(JOBS.get(req.params.id) || { error: "Not found" });
+  const job = JOBS.get(req.params.id);
+  res.json(job || { status: "not_found" });
 });
 
-app.listen(process.env.PORT || 3000, () => console.log("Gemini API Ready!"));
+app.listen(process.env.PORT || 3000, () => console.log("Server Running ✅"));
